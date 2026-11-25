@@ -1,0 +1,46 @@
+[
+    {
+        "id": "spotloc_9af78aba-12d6-4c36-8f09-b37214fe39b1",
+        "business": {
+            "name": "Retro Shankar Mess",
+            "category": "Food",
+            "instagram_username": "retroshankarmess"
+        },
+        "address": {
+            "full_address": "105, 3rd Ave, Q, Anna Nagar, Chennai, Tamil Nadu, 600040, India",
+            "building_number": "105",
+            "street": "3rd Ave",
+            "block": "Q",
+            "locality": "Anna Nagar",
+            "city": "Chennai",
+            "district": "Chennai",
+            "state": "Tamil Nadu",
+            "country": "India",
+            "postal_code": "600040"
+        },
+        "coordinates": {
+            "latitude": 13.0912738,
+            "longitude": 80.2181774
+        },
+        "geocoding": {
+            "status": "coordinates_found",
+            "display_name": "Anna Nagar 3rd Avenue, Q Block, Ward 101, Zone 8 Anna Nagar, Chennai, Chennai Metropolitan Area, Chennai District, Tamil Nadu, 600102, India",
+            "provider": "OpenStreetMap Nominatim",
+            "osm_type": "way",
+            "osm_id": 1322108426
+        },
+        "source": {
+            "reel_url": "https://www.instagram.com/reel/DeRey9TpM7O/",
+            "creator": {
+                "username": "sorum_nanum",
+                "name": "Rameez Rahman | Chennai Food Blogger"
+            }
+        },
+        "verification": {
+            "business_verified": false,
+            "address_verified": false,
+            "coordinates_verified": false,
+            "user_confirmed": false
+        }
+    }
+]
