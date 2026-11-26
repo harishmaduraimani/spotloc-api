@@ -1177,11 +1177,3 @@ def delete_account(
             (user["user_id"],)
         )
         
-path = Path("/mnt/data/spotloc_api.py")
-path.write_text(source, encoding="utf-8")
-
-# Compile the generated source to catch syntax/indentation errors before sharing.
-compile(source, str(path), "exec")
-
-print(f"Created and syntax-checked: {path}")
-print(f"Lines: {len(source.splitlines())}")
