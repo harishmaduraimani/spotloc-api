@@ -101,7 +101,15 @@ def extract_location(item):
 
 def build_minimal_output(item, reel_url):
 
-    caption = item.get("caption") or ""
+    
+    caption = (
+    item.get("caption")
+    or item.get("text")
+    or ""
+    )
+
+if not isinstance(caption, str):
+    caption = str(caption)
 
     hashtags = item.get("hashtags")
 
