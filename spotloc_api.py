@@ -288,44 +288,118 @@ def rate_limit(key: str, max_hits: int, period_seconds: int) -> None:
         _rate_hits[key] = hits
 
 
-def geocode_cached(address: str) -> dict[str, Any]:
+def geocode_cached(address_data: dict[str, Any] | str) -> dict[str, Any]:
     global _last_geocode_at
 
-    key = " ".join(address.lower().split())
+    # Support both structured address and legacy string input.
+    if isinstance(address_data, dict):
+        address = address_data.get("address") or ""
+        cache_data = address_data
+    else:
+        address = address_data or ""
+        cache_data = {"address": address}
 
+    if not address.strip():
+        return {
+            "latitude": None,
+            "longitude": None,
+            "geocoding_status": "not_attempted",
+            "display_name": None,
+            "error": "Address is empty"
+        }
+
+    # Version the cache so previous single-query failures
+    # do not block the new multi-query geocoding logic.
+    key = "geocode-v2:" + json.dumps(
+        cache_data,
+        sort_keys=True,
+        ensure_ascii=False
+    )
+
+    # Check SQLite cache.
     with connect() as db:
         cached = db.execute(
-            "SELECT result_json FROM geocode_cache WHERE address_key=?",
+            """
+            SELECT result_json, created_at
+            FROM geocode_cache
+            WHERE address_key=?
+            """,
             (key,)
         ).fetchone()
 
     if cached:
-        return json.loads(cached[0])
 
-    # Nominatim's public service expects no more than one request per second.
+        cached_result = json.loads(cached["result_json"])
+
+        # Successful coordinates can be reused.
+        if (
+            cached_result.get("latitude") is not None
+            and cached_result.get("longitude") is not None
+        ):
+            return cached_result
+
+        # Temporarily reuse not-found results for 30 minutes.
+        # This avoids repeatedly querying Nominatim.
+        if cached_result.get("geocoding_status") == "not_found":
+
+            from datetime import datetime, timedelta, timezone
+
+            try:
+                created_at = datetime.fromisoformat(
+                    cached["created_at"]
+                )
+
+                if created_at.tzinfo is None:
+                    created_at = created_at.replace(
+                        tzinfo=timezone.utc
+                    )
+
+                if created_at >= datetime.now(timezone.utc) - timedelta(minutes=30):
+                    return cached_result
+
+            except (ValueError, TypeError):
+                pass
+
+    # Serialize geocoding operations to respect Nominatim limits.
     with _geocode_lock:
-        delay = 1.0 - (time.monotonic() - _last_geocode_at)
+
+        delay = 1.1 - (
+            time.monotonic() - _last_geocode_at
+        )
 
         if delay > 0:
             time.sleep(delay)
 
-        result = location_processor.geocode_address(address, verbose=False)
+        # Pass structured data so location_processor can
+        # generate its fallback queries.
+        result = location_processor.geocode_address(
+            cache_data,
+            verbose=False
+        )
+
         _last_geocode_at = time.monotonic()
 
-    if result.get("geocoding_status") != "error":
+    # Cache successful results and temporary not-found results.
+    if result.get("geocoding_status") in (
+        "coordinates_found",
+        "not_found"
+    ):
+
         with connect() as db:
             db.execute(
                 """
                 INSERT OR REPLACE INTO geocode_cache
-                (address_key,result_json,created_at)
-                VALUES(?,?,?)
+                (address_key, result_json, created_at)
+                VALUES (?, ?, ?)
                 """,
-                (key, json.dumps(result), now_iso())
+                (
+                    key,
+                    json.dumps(result),
+                    now_iso()
+                )
             )
 
     return result
-
-
 def safe_pipeline_error(error: Exception, stage: str) -> HTTPException:
     message = str(error).lower()
 
@@ -652,17 +726,12 @@ def run_analysis(
         if progress:
             progress("resolving_location")
 
-        coords = (
-            geocode_cached(address)
-            if address
-            else {
-                "latitude": None,
-                "longitude": None,
-                "geocoding_status": "not_attempted",
-                "display_name": None
-            }
-        )
-
+        coords = geocode_cached(normalized) if address else {
+            "latitude": None,
+            "longitude": None,
+            "geocoding_status": "not_attempted",
+            "display_name": None
+        }
         postcode_conflict = bool(
             location.get("postal_code")
             and coords.get("display_name")
