@@ -8,7 +8,8 @@ import requests
 logger = logging.getLogger("spotloc.agent")
 
 MODEL = os.getenv("GEMINI_MODEL", "gemini-3.1-flash-lite")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+GEMINI_API_KEY = (os.getenv("GEMINI_API_KEY") or "").strip()
 
 GEMINI_API_URL = (
     "https://generativelanguage.googleapis.com/v1beta/"
@@ -263,6 +264,8 @@ def call_gemini(prompt: str) -> dict:
         raise RuntimeError(
             "GEMINI_API_KEY is missing from server environment."
         )
+    if "\n" in GEMINI_API_KEY or "\r" in GEMINI_API_KEY:
+        raise RuntimeError("GEMINI_API_KEY contains invalid newline characters.")
 
     headers = {
         "Content-Type": "application/json",
