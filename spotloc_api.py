@@ -867,8 +867,6 @@ def resume_reel_jobs() -> None:
         _job_thread.start()
 
 
-@app.post("/api/reel-jobs", status_code=202)
-
 @app.get("/api/reel-jobs")
 def list_reel_jobs(
     user: dict[str, Any] = Depends(current_user)
@@ -888,6 +886,7 @@ def list_reel_jobs(
 
     return [dict(row) for row in rows]
 
+
 @app.post("/api/reel-jobs", status_code=202)
 def create_reel_job(
     body: AnalyzeRequest,
@@ -900,7 +899,6 @@ def create_reel_job(
     should_queue = False
 
     with connect() as db:
-
         row = db.execute(
             """
             SELECT job_id,status,stage
@@ -911,11 +909,9 @@ def create_reel_job(
         ).fetchone()
 
         if row:
-
             job_id = row["job_id"]
 
             if row["status"] == "failed":
-
                 db.execute(
                     """
                     UPDATE reel_jobs
@@ -934,12 +930,10 @@ def create_reel_job(
                 should_queue = True
 
             else:
-
                 status_value = row["status"]
                 stage_value = row["stage"]
 
         else:
-
             job_id = secrets.token_urlsafe(18)
 
             db.execute(
@@ -954,9 +948,7 @@ def create_reel_job(
                     created_at,
                     updated_at
                 )
-                VALUES(
-                    ?, ?, ?, 'queued', 'queued', ?, ?
-                )
+                VALUES (?, ?, ?, 'queued', 'queued', ?, ?)
                 """,
                 (
                     job_id,
@@ -971,8 +963,7 @@ def create_reel_job(
             stage_value = "queued"
             should_queue = True
 
-    # IMPORTANT:
-    # Queue the job only AFTER the database transaction commits.
+    # Queue only after the database transaction commits.
     if should_queue:
         logger.info("Queuing Reel job: %s", job_id)
         _job_queue.put(job_id)
@@ -982,6 +973,8 @@ def create_reel_job(
         "status": status_value,
         "stage": stage_value
     }
+
+
 @app.get("/api/reel-jobs/{job_id}")
 def get_reel_job(
     job_id: str,
@@ -999,14 +992,19 @@ def get_reel_job(
         ).fetchone()
 
     if not row:
-        raise HTTPException(status_code=404, detail="Reel job not found.")
+        raise HTTPException(
+            status_code=404,
+            detail="Reel job not found."
+        )
 
     result = dict(row)
+
     result["result"] = (
         json.loads(result.pop("result_json"))
         if result.get("result_json")
         else None
     )
+
     return result
 
 
