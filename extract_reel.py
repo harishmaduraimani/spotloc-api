@@ -1,22 +1,21 @@
-
 import os
 import re
 import json
 from pathlib import Path
+
 from dotenv import load_dotenv
 from apify_client import ApifyClient
+
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
 APIFY_TOKEN = os.getenv("APIFY_TOKEN")
-
 ACTOR_ID = "apify/instagram-scraper"
-
 OUTPUT_FILE = "minimal_reel.json"
 
 
 def get_reel_url():
-    url = input("\nPaste Instagram Reel URL: ").strip()
+    url = input("\\nPaste Instagram Reel URL: ").strip()
 
     if not url:
         raise ValueError("Reel URL cannot be empty.")
@@ -43,7 +42,6 @@ def extract_tagged_users(tagged_users):
         return users
 
     for item in tagged_users:
-
         if not isinstance(item, dict):
             continue
 
@@ -100,22 +98,19 @@ def extract_location(item):
 
 
 def build_minimal_output(item, reel_url):
-
-    
     caption = (
-    item.get("caption")
-    or item.get("text")
-    or ""
+        item.get("caption")
+        or item.get("text")
+        or ""
     )
 
-if not isinstance(caption, str):
-    caption = str(caption)
+    if not isinstance(caption, str):
+        caption = str(caption)
 
     hashtags = item.get("hashtags")
 
     if not isinstance(hashtags, list):
         hashtags = extract_hashtags(caption)
-
     else:
         hashtags = [
             tag.get("name") if isinstance(tag, dict) else tag
@@ -131,25 +126,16 @@ if not isinstance(caption, str):
 
     result = {
         "reel_url": reel_url,
-
         "reel_id": item.get("id"),
-
         "caption": caption,
-
         "hashtags": hashtags,
-
         "creator": creator,
-
         "thumbnail": item.get("displayUrl"),
-
         "video_url": item.get("videoUrl"),
-
         "tagged_users": extract_tagged_users(
             item.get("taggedUsers")
         ),
-
         "location": location,
-
         "timestamp": item.get("timestamp")
     }
 
@@ -157,12 +143,13 @@ if not isinstance(caption, str):
 
 
 def scrape_reel(reel_url, output_file=OUTPUT_FILE, verbose=True):
-
     if verbose:
-        print("\nConnecting to Apify...")
+        print("\\nConnecting to Apify...")
 
     if not APIFY_TOKEN:
-        raise RuntimeError("Reel extraction is not configured on this server.")
+        raise RuntimeError(
+            "Reel extraction is not configured on this server."
+        )
 
     client = ApifyClient(APIFY_TOKEN)
 
@@ -178,7 +165,7 @@ def scrape_reel(reel_url, output_file=OUTPUT_FILE, verbose=True):
     )
 
     if verbose:
-        print("\nScraper status:", run.status)
+        print("\\nScraper status:", run.status)
 
     if run.status != "SUCCEEDED":
         raise RuntimeError(
@@ -208,12 +195,7 @@ def scrape_reel(reel_url, output_file=OUTPUT_FILE, verbose=True):
     )
 
     if output_file:
-        with open(
-            output_file,
-            "w",
-            encoding="utf-8"
-        ) as file:
-
+        with open(output_file, "w", encoding="utf-8") as file:
             json.dump(
                 minimal_data,
                 file,
@@ -222,8 +204,7 @@ def scrape_reel(reel_url, output_file=OUTPUT_FILE, verbose=True):
             )
 
     if verbose:
-        print("\n========== MINIMAL REEL DATA ==========\n")
-
+        print("\\n========== MINIMAL REEL DATA ==========\\n")
         print(
             json.dumps(
                 minimal_data,
@@ -231,29 +212,33 @@ def scrape_reel(reel_url, output_file=OUTPUT_FILE, verbose=True):
                 ensure_ascii=False
             )
         )
-
-        print("\n=======================================")
+        print("\\n=======================================")
 
     if output_file and verbose:
-        print(f"\nSaved successfully: {output_file}")
+        print(f"\\nSaved successfully: {output_file}")
 
     return minimal_data
 
 
 def main():
-
     if not APIFY_TOKEN:
         print("ERROR: APIFY_TOKEN missing in .env")
         return
 
     try:
         reel_url = get_reel_url()
-
         scrape_reel(reel_url)
-
     except Exception as error:
-        print("\nERROR:", error)
+        print("\\nERROR:", error)
 
 
 if __name__ == "__main__":
     main()
+
+
+path = Path("/mnt/data/extract_reel.py")
+path.write_text(code, encoding="utf-8")
+
+# Verify syntax without importing external dependencies.
+compile(code, str(path), "exec")
+print(f"Created and syntax-checked: {path}")
