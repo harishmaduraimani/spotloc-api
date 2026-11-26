@@ -236,9 +236,3 @@ if __name__ == "__main__":
     main()
 
 
-path = Path("/mnt/data/extract_reel.py")
-path.write_text(code, encoding="utf-8")
-
-# Verify syntax without importing external dependencies.
-compile(code, str(path), "exec")
-print(f"Created and syntax-checked: {path}")
