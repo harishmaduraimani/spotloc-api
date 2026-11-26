@@ -1178,8 +1178,7 @@ def delete_account(
             "DELETE FROM users WHERE user_id=?",
             (user["user_id"],)
         )
-'''
-
+        
 path = Path("/mnt/data/spotloc_api.py")
 path.write_text(source, encoding="utf-8")
 
