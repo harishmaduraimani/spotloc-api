@@ -387,13 +387,11 @@ def run_analysis(reel_url: str, progress: Any = None) -> dict[str, Any]:
     except HTTPException:
         raise
     except Exception as error:
-
-    logger.exception(
+        logger.exception(
         "Reel analysis failed during stage=%s. Error type=%s. Error=%s",
         stage,
         type(error).__name__,
-        str(error)
-    )
+        str(error))
 
     raise safe_pipeline_error(
         error,
