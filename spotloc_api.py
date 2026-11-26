@@ -868,62 +868,6 @@ def resume_reel_jobs() -> None:
 
 
 @app.post("/api/reel-jobs", status_code=202)
-def create_reel_job(
-    body: AnalyzeRequest,
-    user: dict[str, Any] = Depends(current_user)
-) -> dict[str, Any]:
-    rate_limit(f"analyze:{user['user_id']}", 5, 3600)
-    now = now_iso()
-
-    with connect() as db:
-        row = db.execute(
-            """
-            SELECT job_id,status,stage FROM reel_jobs
-            WHERE user_id=? AND reel_url=?
-            """,
-            (user["user_id"], body.reel_url)
-        ).fetchone()
-
-        if row:
-            job_id = row["job_id"]
-
-            if row["status"] == "failed":
-                db.execute(
-                    """
-                    UPDATE reel_jobs
-                    SET status='queued',stage='queued',result_json=NULL,
-                        error_message=NULL,updated_at=?
-                    WHERE job_id=?
-                    """,
-                    (now, job_id)
-                )
-                status_value = stage_value = "queued"
-                _job_queue.put(job_id)
-            else:
-                status_value = row["status"]
-                stage_value = row["stage"]
-
-        else:
-            job_id = secrets.token_urlsafe(18)
-
-            db.execute(
-                """
-                INSERT INTO reel_jobs
-                (job_id,user_id,reel_url,status,stage,created_at,updated_at)
-                VALUES(?,?,?,'queued','queued',?,?)
-                """,
-                (job_id, user["user_id"], body.reel_url, now, now)
-            )
-
-            status_value = stage_value = "queued"
-            _job_queue.put(job_id)
-
-    return {
-        "job_id": job_id,
-        "status": status_value,
-        "stage": stage_value
-    }
-
 
 @app.get("/api/reel-jobs")
 def list_reel_jobs(
@@ -944,7 +888,100 @@ def list_reel_jobs(
 
     return [dict(row) for row in rows]
 
+@app.post("/api/reel-jobs", status_code=202)
+def create_reel_job(
+    body: AnalyzeRequest,
+    user: dict[str, Any] = Depends(current_user)
+) -> dict[str, Any]:
 
+    rate_limit(f"analyze:{user['user_id']}", 5, 3600)
+
+    now = now_iso()
+    should_queue = False
+
+    with connect() as db:
+
+        row = db.execute(
+            """
+            SELECT job_id,status,stage
+            FROM reel_jobs
+            WHERE user_id=? AND reel_url=?
+            """,
+            (user["user_id"], body.reel_url)
+        ).fetchone()
+
+        if row:
+
+            job_id = row["job_id"]
+
+            if row["status"] == "failed":
+
+                db.execute(
+                    """
+                    UPDATE reel_jobs
+                    SET status='queued',
+                        stage='queued',
+                        result_json=NULL,
+                        error_message=NULL,
+                        updated_at=?
+                    WHERE job_id=?
+                    """,
+                    (now, job_id)
+                )
+
+                status_value = "queued"
+                stage_value = "queued"
+                should_queue = True
+
+            else:
+
+                status_value = row["status"]
+                stage_value = row["stage"]
+
+        else:
+
+            job_id = secrets.token_urlsafe(18)
+
+            db.execute(
+                """
+                INSERT INTO reel_jobs
+                (
+                    job_id,
+                    user_id,
+                    reel_url,
+                    status,
+                    stage,
+                    created_at,
+                    updated_at
+                )
+                VALUES(
+                    ?, ?, ?, 'queued', 'queued', ?, ?
+                )
+                """,
+                (
+                    job_id,
+                    user["user_id"],
+                    body.reel_url,
+                    now,
+                    now
+                )
+            )
+
+            status_value = "queued"
+            stage_value = "queued"
+            should_queue = True
+
+    # IMPORTANT:
+    # Queue the job only AFTER the database transaction commits.
+    if should_queue:
+        logger.info("Queuing Reel job: %s", job_id)
+        _job_queue.put(job_id)
+
+    return {
+        "job_id": job_id,
+        "status": status_value,
+        "stage": stage_value
+    }
 @app.get("/api/reel-jobs/{job_id}")
 def get_reel_job(
     job_id: str,
