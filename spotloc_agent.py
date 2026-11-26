@@ -1,21 +1,43 @@
-
+```python
 import json
+import os
 import requests
-from pathlib import Path
 
-MODEL = "qwen3:4b"
+# ==========================================
+# SPOTLOC CLOUD AI CONFIGURATION
+# ==========================================
+
+MODEL = os.getenv(
+    "GEMINI_MODEL",
+    "gemini-3.1-flash-lite"
+)
+
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
+GEMINI_API_URL = (
+    f"https://generativelanguage.googleapis.com/v1beta/"
+    f"models/{MODEL}:generateContent"
+)
 
 INPUT_FILE = "minimal_reel.json"
 OUTPUT_FILE = "agent_analysis.json"
 
-OLLAMA_API = "http://localhost:11434/api/chat"
+REQUEST_TIMEOUT = 90
 
+
+# ==========================================
+# LOAD REEL DATA
+# ==========================================
 
 def load_reel():
 
     with open(INPUT_FILE, "r", encoding="utf-8") as file:
         return json.load(file)
 
+
+# ==========================================
+# LOCATION INTELLIGENCE PROMPT
+# ==========================================
 
 def create_prompt(data):
 
@@ -34,7 +56,6 @@ You are SpotLoc Location Intelligence Agent.
 Your primary objective is to identify the EXACT REAL-WORLD
 LOCATION of a business featured in an Instagram Reel.
 
-IMPORTANT:
 Location identification is more important than simply
 extracting the business name.
 
@@ -94,6 +115,16 @@ ANALYSIS TASKS:
    - If several places are mentioned, identify each.
    - Identify which one is the primary featured business.
 
+IMPORTANT RULES:
+
+- Never invent an address.
+- Never invent GPS coordinates.
+- Never treat hashtags as proof of an address.
+- Never claim browser verification without actual research.
+- Return null for unknown information.
+- Confidence values must be between 0 and 1.
+- Preserve the requested JSON structure.
+
 RETURN ONLY VALID JSON:
 
 {{
@@ -118,13 +149,7 @@ RETURN ONLY VALID JSON:
     "reconstructed_address": null
   }},
 
-  "location_clues": [
-    {{
-      "text": null,
-      "meaning": null,
-      "source": null
-    }}
-  ],
+  "location_clues": [],
 
   "other_places": [],
 
@@ -155,45 +180,156 @@ RETURN ONLY VALID JSON:
 """
 
 
+# ==========================================
+# GEMINI CLOUD API
+# ==========================================
+
+def call_gemini(prompt):
+
+    if not GEMINI_API_KEY:
+        raise RuntimeError(
+            "GEMINI_API_KEY is missing from server environment."
+        )
+
+    headers = {
+        "Content-Type": "application/json",
+        "x-goog-api-key": GEMINI_API_KEY
+    }
+
+    payload = {
+        "contents": [
+            {
+                "role": "user",
+                "parts": [
+                    {
+                        "text": prompt
+                    }
+                ]
+            }
+        ],
+
+        "generationConfig": {
+            "temperature": 0.1,
+            "responseMimeType": "application/json",
+            "maxOutputTokens": 4096
+        }
+    }
+
+    try:
+
+        response = requests.post(
+            GEMINI_API_URL,
+            headers=headers,
+            json=payload,
+            timeout=REQUEST_TIMEOUT
+        )
+
+        if not response.ok:
+
+            # Do not expose API key or request headers.
+            try:
+                error_data = response.json()
+                error_message = (
+                    error_data.get("error", {}).get(
+                        "message",
+                        "Unknown Gemini API error"
+                    )
+                )
+            except ValueError:
+                error_message = "Gemini API request failed"
+
+            raise RuntimeError(
+                f"Gemini API error {response.status_code}: "
+                f"{error_message}"
+            )
+
+        result = response.json()
+
+        candidates = result.get("candidates", [])
+
+        if not candidates:
+            raise RuntimeError(
+                "Gemini returned no analysis candidates."
+            )
+
+        candidate = candidates[0]
+
+        content = candidate.get("content", {})
+
+        parts = content.get("parts", [])
+
+        output = "".join(
+            part.get("text", "")
+            for part in parts
+        ).strip()
+
+        if not output:
+            raise RuntimeError(
+                "Gemini returned empty analysis."
+            )
+
+        analysis = json.loads(output)
+
+        if not isinstance(analysis, dict):
+            raise RuntimeError(
+                "Gemini response is not a JSON object."
+            )
+
+        return analysis
+
+    except requests.exceptions.Timeout as error:
+
+        raise RuntimeError(
+            "Gemini request timed out."
+        ) from error
+
+    except requests.exceptions.ConnectionError as error:
+
+        raise RuntimeError(
+            "Could not connect to Gemini cloud API."
+        ) from error
+
+    except requests.exceptions.RequestException as error:
+
+        raise RuntimeError(
+            f"Gemini network request failed: {error}"
+        ) from error
+
+    except json.JSONDecodeError as error:
+
+        raise RuntimeError(
+            "Gemini returned invalid JSON."
+        ) from error
+
+
+# ==========================================
+# MAIN AGENT INTERFACE
+# ==========================================
+
 def run_agent(data):
 
     prompt = create_prompt(data)
 
-    print("\nSpotLoc Location Intelligence Agent running...\n")
-
-    response = requests.post(
-        OLLAMA_API,
-        json={
-            "model": MODEL,
-            "messages": [
-                {
-                    "role": "user",
-                    "content": prompt
-                }
-            ],
-            "format": "json",
-            "stream": False,
-            "think": False,
-            "options": {
-                "temperature": 0.1,
-                "num_ctx": 8192
-            }
-        },
-        timeout=300
+    print(
+        "\nSpotLoc Cloud Location Intelligence Agent running..."
     )
 
-    response.raise_for_status()
+    print(f"AI Model: {MODEL}")
 
-    content = response.json()["message"]["content"]
+    result = call_gemini(prompt)
 
-    return json.loads(content)
+    return result
 
+
+# ==========================================
+# LOCAL TESTING
+# ==========================================
 
 def main():
 
     try:
 
-        if not Path(INPUT_FILE).exists():
+        if not os.path.exists(INPUT_FILE):
             raise FileNotFoundError(INPUT_FILE)
 
         data = load_reel()
@@ -217,23 +353,21 @@ def main():
 
         print("\n========== LOCATION ANALYSIS ==========\n")
 
-        print(json.dumps(
-            result,
-            indent=4,
-            ensure_ascii=False
-        ))
+        print(
+            json.dumps(
+                result,
+                indent=4,
+                ensure_ascii=False
+            )
+        )
 
         print("\nSaved:", OUTPUT_FILE)
 
-    except requests.exceptions.ConnectionError:
-        print("ERROR: Ollama is not running.")
-
-    except requests.exceptions.Timeout:
-        print("ERROR: Agent timed out.")
-
     except Exception as error:
-        print("ERROR:", error)
+
+        print("\nSPOTLOC AGENT ERROR:", error)
 
 
 if __name__ == "__main__":
     main()
+```
